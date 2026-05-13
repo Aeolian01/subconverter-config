@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Subconverter 配置与覆写脚本生成器</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0b1220;
+      --panel:#111a2b;
+      --panel2:#0d1628;
+      --muted:#96a6c4;
+      --text:#e8eefc;
+      --line:#263753;
+      --accent:#6ea8fe;
+      --accent2:#87e0a4;
+      --danger:#ff7b72;
+      --warn:#f0ddb2;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,PingFang SC,Microsoft YaHei,sans-serif}
+    code{background:#0c1528;padding:2px 6px;border-radius:6px;border:1px solid var(--line)}
+    a{color:var(--accent)}
+    label{font-weight:650}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px}
+    .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px}
+    .title h1{font-size:28px;line-height:1.15;margin:0 0 8px}
+    .title p{margin:0;color:var(--muted)}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+    .chip{border:1px solid var(--line);background:#101b2e;color:#cfe0ff;border-radius:999px;padding:6px 10px;font-size:12px;white-space:nowrap}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .field input,.field textarea,.field select{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#0b1324;color:var(--text)}
+    .field input:focus,.field textarea:focus,.field select:focus{outline:2px solid rgba(110,168,254,.28);border-color:var(--accent)}
+    .field textarea{min-height:90px;resize:vertical}
+    .hint{color:var(--muted);font-size:12px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px}
+    .btn{border:1px solid var(--line);background:#16233a;color:var(--text);padding:9px 12px;border-radius:8px;cursor:pointer;min-height:38px}
+    .btn:hover{filter:brightness(1.08)}
+    .btn.primary{background:var(--accent);color:#08111f;border-color:transparent;font-weight:700}
+    .btn.success{background:var(--accent2);color:#08130d;border-color:transparent;font-weight:700}
+    .btn.danger{background:#2d1519;color:#ffd7d7;border-color:#5c262d}
+    .btn.small{min-height:32px;padding:6px 9px;font-size:12px}
+    details{margin-top:16px}
+    summary{cursor:pointer;list-style:none;font-weight:750}
+    summary::-webkit-details-marker{display:none}
+    .summaryline{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .summaryline span{color:var(--muted);font-size:12px;font-weight:500}
+    .advanced-body{margin-top:14px}
+    .list{display:flex;flex-direction:column;gap:10px}
+    .item{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel2)}
+    .itemhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+    .itemhead strong{font-size:15px}
+    .checkrow{display:flex;align-items:flex-start;gap:10px}
+    .checkrow input{margin-top:3px}
+    .typehelp{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#101b2e;color:var(--muted);font-size:12px}
+    .meta{color:var(--muted);font-size:12px;word-break:break-all}
+    .bad{color:var(--warn)}
+    .code-panel{padding:0;overflow:hidden}
+    .code-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+    .code-title strong{display:block;font-size:15px}
+    .code-title span{display:block;margin-top:2px}
+    .code-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px}
+    .code-stat{border:1px solid var(--line);background:#101b2e;border-radius:999px;color:#bfd1f6;font-size:12px;padding:5px 9px;white-space:nowrap}
+    .code-output{display:block;width:100%;height:360px;margin:0;padding:12px 14px;border:0;border-radius:0;background:#050914;color:#dce7ff;font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre;overflow:auto;resize:vertical;tab-size:2}
+    .code-output:focus{outline:2px solid rgba(110,168,254,.28);outline-offset:-2px}
+    .script-output{height:520px}
+    .code-panel.expanded .code-output{height:72vh}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#172641;border:1px solid var(--line);color:#bfd1f6;font-size:12px;margin-right:6px}
+    .notice{padding:10px 12px;border:1px solid var(--line);background:#0d172a;border-radius:8px;color:var(--muted);margin-bottom:12px}
+    .successbox{padding:12px;border:1px solid #275d3f;background:#0f2218;border-radius:8px;color:#c9f0d6;word-break:break-all}
+    .warn{padding:12px;border:1px solid #5c4b22;background:#241d0f;border-radius:8px;color:var(--warn)}
+    .footer{margin-top:14px;color:var(--muted);font-size:12px}
+    .mini{font-size:12px}
+    @media (max-width:980px){
+      .topbar{display:block}
+      .chips{justify-content:flex-start;margin-top:12px}
+      .grid,.row{grid-template-columns:1fr}
+      .wrap{padding:16px}
+      .code-head{display:block}
+      .code-actions{justify-content:flex-start;margin-top:10px}
+      .code-output{height:300px}
+      .script-output{height:380px}
+      .code-panel.expanded .code-output{height:64vh}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="title">
+      <h1>Subconverter 配置与覆写脚本生成器</h1>
+      <p>生成订阅转换使用的 <code>ini</code> 配置文件，以及 Clash Verge Rev 使用的 <code>Script</code> 覆写脚本。</p>
+    </div>
+    <div class="chips">
+      <span class="chip">ini + Script</span>
+      <span class="chip">港 / 美 AI 分流</span>
+      <span class="chip">dialer-proxy 链式</span>
+      <span class="chip">Token 不保存</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="presetAll">载入 AI 预设</button>
+    <button class="btn" id="addRule">添加规则</button>
+    <button class="btn" id="addGroup">添加分组</button>
+    <button class="btn" id="exportJson">导出 JSON</button>
+    <button class="btn" id="importBtn">导入 JSON</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+    <button class="btn danger" id="resetAll">恢复默认</button>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <div class="row">
+          <div class="field"><label for="title">配置标题</label><input id="title"></div>
+          <div class="field"><label for="filename">下载文件名</label><input id="filename"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="enable">enable_rule_generator</label><select id="enable"><option value="true">true</option><option value="false">false</option></select></div>
+          <div class="field"><label for="overwrite">overwrite_original_rules</label><select id="overwrite"><option value="true">true</option><option value="false">false</option></select></div>
+        </div>
+        <div class="field"><label for="comments">头部注释</label><textarea id="comments"></textarea></div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="itemhead"><strong>规则列表 <span class="badge" id="ruleCount">0</span></strong><span class="hint">生成格式：<code>ruleset=策略组,规则地址/表达式</code></span></div>
+        <div id="rules" class="list"></div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="itemhead"><strong>分组列表 <span class="badge" id="groupCount">0</span></strong><span class="hint">分组类型可直接下拉选择，成员每行一个</span></div>
+        <div id="groups" class="list"></div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="field" style="margin-bottom:0">
+          <label for="extra">原始补充配置</label>
+          <textarea id="extra" placeholder="例如：&#10;ruleset=🎯 全球直连,[]GEOIP,CN&#10;ruleset=🐟 漏网之鱼,[]FINAL"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel code-panel" id="iniCodePanel">
+        <div class="code-head">
+          <div class="code-title">
+            <strong>ini 生成结果</strong>
+            <span class="hint">用于 subconverter 外部配置</span>
+          </div>
+          <div class="code-actions">
+            <span class="code-stat" id="iniStats">0 行 / 0 字</span>
+            <button class="btn small primary" id="copyBtn">复制</button>
+            <button class="btn small" id="downloadBtn">下载 ini</button>
+            <button class="btn small" id="expandIniBtn">放大查看</button>
+          </div>
+        </div>
+        <textarea id="output" class="code-output output" wrap="off" readonly></textarea>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="itemhead"><strong>Clash Verge 脚本设置</strong><span class="hint">落地分组来自左侧 ini 分组</span></div>
+        <div class="field">
+          <label for="scriptFrontGroupName">前置节点组名</label>
+          <input id="scriptFrontGroupName" placeholder="☑️ 前置节点">
+        </div>
+        <div class="itemhead"><strong>落地分组 <span class="badge" id="landingCount">0</span></strong><span class="hint">勾选后生成 dialer-proxy 链路</span></div>
+        <div id="landingGroups" class="list"></div>
+        <div class="notice" style="margin-top:12px">AI 分组会从规则列表自动识别；落地分组的匹配正则默认取对应分组“成员 / 参数”的第一行。</div>
+      </div>
+
+      <div class="panel code-panel" id="scriptCodePanel" style="margin-top:16px">
+        <div class="code-head">
+          <div class="code-title">
+            <strong>Clash Verge 覆写脚本</strong>
+            <span class="hint">用于 Script 增强配置</span>
+          </div>
+          <div class="code-actions">
+            <span class="code-stat" id="scriptStats">0 行 / 0 字</span>
+            <button class="btn small primary" id="copyScriptBtn">复制</button>
+            <button class="btn small" id="downloadScriptBtn">下载 JS</button>
+            <button class="btn small" id="expandScriptBtn">放大查看</button>
+          </div>
+        </div>
+        <textarea id="scriptOutput" class="code-output script-output" wrap="off" readonly></textarea>
+      </div>
+
+      <details>
+        <summary class="panel summaryline">
+          发布当前 ini 到 GitHub
+          <span>需要有仓库写入权限的 Token</span>
+        </summary>
+        <div class="panel advanced-body">
+          <div class="notice">GitHub Token 只在当前浏览器里用于调用 GitHub API，不会保存到本地存储。</div>
+          <div class="row">
+            <div class="field"><label for="ghOwner">Owner</label><input id="ghOwner"></div>
+            <div class="field"><label for="ghRepo">Repo</label><input id="ghRepo"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="ghBranch">Branch</label><input id="ghBranch"></div>
+            <div class="field"><label for="ghPath">保存路径</label><input id="ghPath" placeholder="configs/ACL4SSR_Online_AI_Chain.ini"></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="ghMessage">Commit message</label><input id="ghMessage"></div>
+            <div class="field"><label for="ghToken">GitHub Token</label><input id="ghToken" type="password" placeholder="ghp_ / github_pat_..."></div>
+          </div>
+          <div class="toolbar">
+            <button class="btn success" id="fillPathBtn">用文件名填充路径</button>
+            <button class="btn success" id="publishBtn">发布到 GitHub</button>
+          </div>
+          <div class="hint mini">Token 权限至少需要包含该仓库 Contents 写权限。发布后会得到固定 raw 链接。</div>
+          <div id="publishResult" style="margin-top:12px"></div>
+        </div>
+      </details>
+
+      <div class="footer">页面数据默认保存在浏览器本地存储。GitHub Token 不会保存。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORE_KEY = 'subconverter-config-builder-v4';
+const preset = {
+  title: 'ACL4SSR_Online_AI_Chain',
+  filename: 'ACL4SSR_Online_AI_Chain.ini',
+  enable: 'true',
+  overwrite: 'true',
+  comments: ';不要随意改变关键字，否则会导致出错\n;Mihomo AI 三分流 + 兼容分组模板\n\n; OpenAI / Gemini / Anthropic Clash 文本规则源',
+  rules: [
+    { group: '🤖 OpenAi', url: 'https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.list' },
+    { group: '🤖 Gemini', url: 'https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Gemini/Gemini.list' },
+    { group: '🤖 Anthropic', url: 'https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Claude/Claude.list' },
+    { group: '🎯 全球直连', url: '[]GEOIP,CN' },
+    { group: '🐟 漏网之鱼', url: '[]FINAL' }
+  ],
+  groups: [
+    { name: '🚀 节点选择', type: 'select', items: '[]🇭🇰 香港节点\n[]🇺🇲 美国节点\n[]☑️ 手动选择\n[]DIRECT' },
+    { name: '☑️ 手动选择', type: 'select', items: '.*' },
+    { name: '🇭🇰 香港节点', type: 'load-balance', items: '(港|HK|hk|Hong Kong|HongKong|hongkong|HKG)\nhttp://www.gstatic.com/generate_204\n300,,50' },
+    { name: '🇺🇲 美国节点', type: 'load-balance', items: '(美|US|United States|美国|洛杉矶|西雅图|硅谷|圣何塞|达拉斯)\nhttp://www.gstatic.com/generate_204\n300,,150' },
+    { name: '🤖 OpenAi', type: 'select', items: '[]🇭🇰 香港节点\n[]🇺🇲 美国节点\n[]☑️ 手动选择\n[]DIRECT' },
+    { name: '🤖 Gemini', type: 'select', items: '[]🇭🇰 香港节点\n[]🇺🇲 美国节点\n[]☑️ 手动选择\n[]DIRECT' },
+    { name: '🤖 Anthropic', type: 'select', items: '[]🇭🇰 香港节点\n[]🇺🇲 美国节点\n[]☑️ 手动选择\n[]DIRECT' },
+    { name: '🎯 全球直连', type: 'select', items: '[]DIRECT\n[]🚀 节点选择' },
+    { name: '🐟 漏网之鱼', type: 'select', items: '[]🚀 节点选择\n[]DIRECT' }
+  ],
+  extra: '',
+  script: {
+    frontGroupName: '☑️ 前置节点',
+    selectedLandingGroups: null
+  },
+  ghOwner: 'Aeolian01',
+  ghRepo: 'subconverter-config',
+  ghBranch: 'main',
+  ghPath: 'configs/ACL4SSR_Online_AI_Chain.ini',
+  ghMessage: 'chore: publish generated config'
+};
+const groupTypes = [
+  { value: 'select', label: 'select - 手动选择', help: '手动选择一个策略或节点。常用成员：[]DIRECT、[]其他分组、.*。', placeholder: '[]DIRECT\n[]其他分组\n.*' },
+  { value: 'url-test', label: 'url-test - 自动测速', help: '按延迟自动选择节点。最后两行通常是测试 URL 和间隔参数。', placeholder: '.*\nhttp://www.gstatic.com/generate_204\n300,,50' },
+  { value: 'fallback', label: 'fallback - 故障转移', help: '当前节点不可用时自动切换到下一个可用节点。', placeholder: '.*\nhttp://www.gstatic.com/generate_204\n300,,50' },
+  { value: 'load-balance', label: 'load-balance - 负载均衡', help: '在匹配节点中分摊流量。最后两行通常是测试 URL 和间隔参数。', placeholder: '(港|HK|Hong Kong)\nhttp://www.gstatic.com/generate_204\n300,,50' },
+  { value: 'smart', label: 'smart - 智能测速', help: 'subconverter 智能测速类型，生成到 Clash 时通常按 url-test 处理。', placeholder: '.*\nhttp://www.gstatic.com/generate_204\n300,,50' },
+  { value: 'ssid', label: 'ssid - 按网络切换', help: '按 Wi-Fi / 蜂窝网络名称切换策略，适合高级场景。', placeholder: 'default_group\ncellular=group0,ssid1=group1' }
+];
+
+const $ = s => document.querySelector(s);
+const clone = v => JSON.parse(JSON.stringify(v));
+const esc = s => (s || '').replace(/[&<>\"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function encodeUTF8Base64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function groupTypeMeta(type){
+  if(type === 'relay') return { value: type, label: '自定义：relay', help: '新版 Mihomo 已移除 relay 策略组，继续使用会导致配置检查失败。请改用 select、url-test 或 load-balance。', placeholder: '不建议继续使用 relay' };
+  return groupTypes.find(v => v.value === type) || { value: type, label: '自定义：' + type, help: '导入配置中的自定义类型。生成时会原样保留。', placeholder: '每行一个成员或参数' };
+}
+function groupTypeOptions(type){
+  const known = groupTypes.some(v => v.value === type);
+  const custom = known ? '' : `<option value="${esc(type)}" selected>自定义：${esc(type)}</option>`;
+  return custom + groupTypes.map(v => `<option value="${v.value}"${v.value === type ? ' selected' : ''}>${v.label}</option>`).join('');
+}
+function withDefaults(saved){
+  const next = Object.assign(clone(preset), saved || {});
+  next.rules = Array.isArray(saved && saved.rules) ? saved.rules : clone(preset.rules);
+  next.groups = Array.isArray(saved && saved.groups) ? saved.groups : clone(preset.groups);
+  next.script = Object.assign(clone(preset.script), (saved && saved.script) || {});
+  return next;
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return clone(preset);
+    const saved = JSON.parse(raw);
+    return withDefaults(saved);
+  } catch(e) { return clone(preset); }
+}
+let state = loadState();
+
+function saveState(){
+  const toSave = Object.assign({}, state);
+  delete toSave.ghToken;
+  localStorage.setItem(STORE_KEY, JSON.stringify(toSave));
+}
+
+function buildIni(){
+  const lines = ['[custom]'];
+  (state.comments || '').split(/\n/).map(v => v.trim()).filter(Boolean).forEach(v => lines.push(v));
+  lines.push('');
+  state.rules.filter(v => v.group && v.url).forEach(v => lines.push('ruleset=' + v.group + ',' + v.url));
+  lines.push('');
+  state.groups.filter(v => v.name && v.type).forEach(v => {
+    const parts = (v.items || '').split(/\n/).map(x => x.trim()).filter(Boolean);
+    let line = 'custom_proxy_group=' + v.name + '`' + v.type;
+    if(parts.length) line += '`' + parts.join('`');
+    lines.push(line);
+  });
+  if((state.extra || '').trim()){
+    lines.push('');
+    (state.extra || '').split(/\n/).forEach(v => lines.push(v));
+  }
+  lines.push('');
+  lines.push('enable_rule_generator=' + state.enable);
+  lines.push('overwrite_original_rules=' + state.overwrite);
+  return lines.join('\n');
+}
+
+function firstGroupParam(group){
+  return (group.items || '').split(/\n/).map(v => v.trim()).find(Boolean) || '';
+}
+function isUsableRegexSource(value){
+  if(!value || value.startsWith('[]')) return false;
+  try {
+    new RegExp(value);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+function landingCandidates(){
+  return (state.groups || []).filter(group => group.name).map(group => {
+    const regex = firstGroupParam(group);
+    const valid = isUsableRegexSource(regex);
+    return {
+      name: group.name,
+      regex,
+      valid,
+      auto: /(香港|港|HK|Hong Kong|HongKong|美国|美|US|United States)/i.test(group.name),
+      chainName: group.name + ' 链路落地',
+      prefix: '[链-' + group.name + '] '
+    };
+  });
+}
+function selectedLandingNames(){
+  if(Array.isArray(state.script && state.script.selectedLandingGroups)) {
+    return state.script.selectedLandingGroups;
+  }
+  return landingCandidates().filter(item => item.auto).map(item => item.name);
+}
+function effectiveLandingGroups(){
+  const selected = new Set(selectedLandingNames());
+  return landingCandidates().filter(item => selected.has(item.name) && item.valid);
+}
+function aiGroupNames(){
+  const names = [];
+  (state.rules || []).forEach(rule => {
+    const haystack = ((rule.group || '') + ' ' + (rule.url || '')).toLowerCase();
+    if(rule.group && /(openai|gemini|claude|anthropic)/i.test(haystack) && !names.includes(rule.group)){
+      names.push(rule.group);
+    }
+  });
+  return names.length ? names : ['🤖 OpenAi', '🤖 Gemini', '🤖 Anthropic'];
+}
+function jsString(value){
+  return JSON.stringify(value || '');
+}
+
+function buildVergeScript(){
+  const frontGroup = ((state.script && state.script.frontGroupName) || preset.script.frontGroupName).trim() || preset.script.frontGroupName;
+  const landingGroups = effectiveLandingGroups();
+  const landingCode = landingGroups.map(item => `    { name: ${jsString(item.name)}, regex: new RegExp(${jsString(item.regex)}, "i"), chainName: ${jsString(item.chainName)}, prefix: ${jsString(item.prefix)} }`).join(',\n');
+  const aiGroupsCode = JSON.stringify(aiGroupNames(), null, 2).replace(/\n/g, '\n  ');
+  return `function main(config) {
+  config = config || {};
+
+  var FRONT_GROUP = ${jsString(frontGroup)};
+  var LANDING_GROUPS = [
+${landingCode}
+  ];
+  var AI_GROUPS = ${aiGroupsCode};
+
+  var proxies = Array.isArray(config.proxies) ? config.proxies : [];
+  var groups = Array.isArray(config["proxy-groups"]) ? config["proxy-groups"] : [];
+
+  function isGeneratedProxy(proxy) {
+    return proxy && typeof proxy.name === "string" &&
+      LANDING_GROUPS.some(function (landing) {
+        return proxy.name.indexOf(landing.prefix) === 0;
+      });
+  }
+
+  var originalProxies = proxies.filter(function (proxy) {
+    return proxy && typeof proxy.name === "string" && !isGeneratedProxy(proxy);
+  });
+
+  var usedNames = {};
+  originalProxies.forEach(function (proxy) {
+    usedNames[proxy.name] = true;
+  });
+
+  function uniqueName(base) {
+    var name = base;
+    var index = 2;
+    while (usedNames[name]) {
+      name = base + " #" + index;
+      index += 1;
+    }
+    usedNames[name] = true;
+    return name;
+  }
+
+  function cloneLandingProxy(proxy, landing, generatedProxies) {
+    var copy = JSON.parse(JSON.stringify(proxy));
+    copy.name = uniqueName(landing.prefix + proxy.name);
+    copy["dialer-proxy"] = FRONT_GROUP;
+    landing.proxies.push(copy.name);
+    generatedProxies.push(copy);
+  }
+
+  var frontNames = originalProxies.map(function (proxy) { return proxy.name; });
+  var generatedProxies = [];
+  LANDING_GROUPS.forEach(function (landing) {
+    landing.proxies = [];
+  });
+
+  originalProxies.forEach(function (proxy) {
+    LANDING_GROUPS.forEach(function (landing) {
+      if (landing.regex.test(proxy.name)) {
+        cloneLandingProxy(proxy, landing, generatedProxies);
+      }
+    });
+  });
+
+  config.proxies = originalProxies.concat(generatedProxies);
+
+  var generatedGroupNames = {};
+  generatedGroupNames[FRONT_GROUP] = true;
+  LANDING_GROUPS.forEach(function (landing) {
+    generatedGroupNames[landing.chainName] = true;
+  });
+  AI_GROUPS.forEach(function (name) {
+    generatedGroupNames[name] = true;
+  });
+
+  var keptGroups = groups.filter(function (group) {
+    return !group || !generatedGroupNames[group.name];
+  });
+
+  var generatedGroups = [
+    {
+      name: FRONT_GROUP,
+      type: "select",
+      proxies: frontNames.length ? frontNames : ["DIRECT"]
+    }
+  ];
+  LANDING_GROUPS.forEach(function (landing) {
+    generatedGroups.push({
+      name: landing.chainName,
+      type: "select",
+      proxies: landing.proxies.length ? landing.proxies : ["DIRECT"]
+    });
+  });
+
+  AI_GROUPS.forEach(function (name) {
+    generatedGroups.push({
+      name: name,
+      type: "select",
+      proxies: LANDING_GROUPS.map(function (landing) { return landing.chainName; }).concat([FRONT_GROUP, "DIRECT"])
+    });
+  });
+
+  config["proxy-groups"] = generatedGroups.concat(keptGroups);
+  return config;
+}
+`;
+}
+
+function ruleCard(item, i){
+  return `<div class="item"><div class="itemhead"><strong>规则 ${i+1}</strong><button class="btn danger" onclick="delRule(${i})">删除</button></div><div class="row"><div class="field"><label>策略组</label><input value="${esc(item.group)}" oninput="updateRule(${i},'group',this.value)"></div><div class="field"><label>规则地址 / 表达式</label><input value="${esc(item.url)}" oninput="updateRule(${i},'url',this.value)"></div></div></div>`;
+}
+function groupCard(item, i){
+  const meta = groupTypeMeta(item.type);
+  return `<div class="item"><div class="itemhead"><strong>分组 ${i+1}</strong><button class="btn danger" onclick="delGroup(${i})">删除</button></div><div class="row"><div class="field"><label>分组名</label><input value="${esc(item.name)}" oninput="updateGroup(${i},'name',this.value)"></div><div class="field"><label>分组类型</label><select onchange="setGroupType(${i},this.value)">${groupTypeOptions(item.type)}</select></div></div><div class="typehelp">${esc(meta.help)}</div><div class="field" style="margin-top:10px"><label>成员 / 参数（每行一个）</label><textarea placeholder="${esc(meta.placeholder)}" oninput="updateGroup(${i},'items',this.value)">${esc(item.items)}</textarea></div></div>`;
+}
+function landingCard(item, i){
+  const selected = item.valid && selectedLandingNames().includes(item.name);
+  const status = item.regex ? (item.valid ? '匹配正则：' + item.regex : '正则无效或不可用：' + item.regex) : '需要在成员 / 参数第一行填写节点匹配正则';
+  return `<div class="item"><label class="checkrow"><input type="checkbox"${selected ? ' checked' : ''}${item.valid ? '' : ' disabled'} onchange="toggleLandingGroup(${i},this.checked)"><span><strong>${esc(item.name)}</strong><div class="meta">链路组：${esc(item.chainName)}</div><div class="meta${item.valid ? '' : ' bad'}">${esc(status)}</div></span></label></div>`;
+}
+function renderLandingGroups(){
+  const candidates = landingCandidates();
+  const selectedValid = effectiveLandingGroups().length;
+  $('#landingGroups').innerHTML = candidates.length ? candidates.map(landingCard).join('') : '<div class="notice">左侧暂无可用分组。</div>';
+  $('#landingCount').textContent = selectedValid;
+}
+
+function render(){
+  $('#title').value = state.title || '';
+  $('#filename').value = state.filename || '';
+  $('#enable').value = state.enable || 'true';
+  $('#overwrite').value = state.overwrite || 'true';
+  $('#comments').value = state.comments || '';
+  $('#extra').value = state.extra || '';
+  $('#ghOwner').value = state.ghOwner || '';
+  $('#ghRepo').value = state.ghRepo || '';
+  $('#ghBranch').value = state.ghBranch || 'main';
+  $('#ghPath').value = state.ghPath || '';
+  $('#ghMessage').value = state.ghMessage || '';
+  $('#scriptFrontGroupName').value = (state.script && state.script.frontGroupName) || preset.script.frontGroupName;
+  $('#rules').innerHTML = state.rules.map(ruleCard).join('');
+  $('#groups').innerHTML = state.groups.map(groupCard).join('');
+  renderLandingGroups();
+  $('#ruleCount').textContent = state.rules.length;
+  $('#groupCount').textContent = state.groups.length;
+  $('#output').value = buildIni();
+  $('#scriptOutput').value = buildVergeScript();
+  updateOutputStats();
+  saveState();
+}
+
+function syncStateFromInputs(){
+  state.title = $('#title').value;
+  state.filename = $('#filename').value;
+  state.enable = $('#enable').value;
+  state.overwrite = $('#overwrite').value;
+  state.comments = $('#comments').value;
+  state.extra = $('#extra').value;
+  state.ghOwner = $('#ghOwner').value;
+  state.ghRepo = $('#ghRepo').value;
+  state.ghBranch = $('#ghBranch').value;
+  state.ghPath = $('#ghPath').value;
+  state.ghMessage = $('#ghMessage').value;
+  state.script = state.script || clone(preset.script);
+  state.script.frontGroupName = $('#scriptFrontGroupName').value;
+}
+
+function refreshOutputs(){
+  $('#output').value = buildIni();
+  $('#scriptOutput').value = buildVergeScript();
+  updateOutputStats();
+  saveState();
+}
+function outputStatsText(value){
+  const text = value || '';
+  const lines = text ? text.split(/\n/).length : 0;
+  return lines + ' 行 / ' + text.length + ' 字';
+}
+function updateOutputStats(){
+  $('#iniStats').textContent = outputStatsText($('#output').value);
+  $('#scriptStats').textContent = outputStatsText($('#scriptOutput').value);
+}
+async function copyText(selector, successMessage){
+  await navigator.clipboard.writeText($(selector).value);
+  alert(successMessage);
+}
+function downloadText(selector, filename, mimeType){
+  const blob = new Blob([$(selector).value], {type:mimeType});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function toggleCodePanel(panelSelector, buttonSelector){
+  const panel = $(panelSelector);
+  const button = $(buttonSelector);
+  const expanded = panel.classList.toggle('expanded');
+  button.textContent = expanded ? '收起' : '放大查看';
+}
+function syncAndRefresh(){ syncStateFromInputs(); refreshOutputs(); }
+function updateRule(i, key, value){
+  if(!state.rules[i]) return;
+  state.rules[i][key] = value;
+  refreshOutputs();
+}
+function updateGroup(i, key, value){
+  if(!state.groups[i]) return;
+  state.groups[i][key] = value;
+  renderLandingGroups();
+  refreshOutputs();
+}
+function toggleLandingGroup(i, checked){
+  const item = landingCandidates()[i];
+  if(!item || !item.valid) return;
+  const validNames = new Set(landingCandidates().filter(v => v.valid).map(v => v.name));
+  const names = selectedLandingNames().filter(name => validNames.has(name));
+  const existing = new Set(names);
+  if(checked) existing.add(item.name);
+  else existing.delete(item.name);
+  state.script = state.script || clone(preset.script);
+  state.script.selectedLandingGroups = Array.from(existing);
+  renderLandingGroups();
+  refreshOutputs();
+}
+function setGroupType(i, type){ state.groups[i].type = type; render(); }
+function delRule(i){ state.rules.splice(i,1); render(); }
+function delGroup(i){ state.groups.splice(i,1); render(); }
+window.updateRule = updateRule;
+window.updateGroup = updateGroup;
+window.toggleLandingGroup = toggleLandingGroup;
+window.setGroupType = setGroupType;
+window.delRule = delRule;
+window.delGroup = delGroup;
+
+['title','filename','enable','overwrite','comments','extra','ghOwner','ghRepo','ghBranch','ghPath','ghMessage','scriptFrontGroupName'].forEach(id => {
+  const el = $('#' + id);
+  el.oninput = syncAndRefresh;
+  el.onchange = syncAndRefresh;
+});
+
+$('#addRule').onclick = () => { state.rules.push({group:'', url:''}); render(); };
+$('#addGroup').onclick = () => { state.groups.push({name:'', type:'select', items:''}); render(); };
+$('#presetAll').onclick = () => { state = clone(preset); render(); $('#publishResult').innerHTML = ''; };
+$('#resetAll').onclick = () => { if(confirm('确定恢复默认预设吗？')){ state = clone(preset); render(); $('#publishResult').innerHTML = ''; } };
+$('#copyBtn').onclick = () => copyText('#output', '已复制 ini 到剪贴板');
+$('#copyScriptBtn').onclick = () => copyText('#scriptOutput', '已复制覆写脚本到剪贴板');
+$('#downloadBtn').onclick = () => downloadText('#output', (state.filename || 'config.ini').replace(/\s+/g, '_'), 'text/plain;charset=utf-8');
+$('#downloadScriptBtn').onclick = () => downloadText('#scriptOutput', 'clash-verge-dialer-proxy.js', 'text/javascript;charset=utf-8');
+$('#expandIniBtn').onclick = () => toggleCodePanel('#iniCodePanel', '#expandIniBtn');
+$('#expandScriptBtn').onclick = () => toggleCodePanel('#scriptCodePanel', '#expandScriptBtn');
+$('#exportJson').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'subconverter-config.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const json = JSON.parse(reader.result);
+      const keepToken = $('#ghToken').value;
+      state = withDefaults(json);
+      render();
+      $('#ghToken').value = keepToken;
+      alert('导入成功');
+    } catch(err) {
+      alert('JSON 导入失败');
+    }
+  };
+  reader.readAsText(file);
+};
+$('#fillPathBtn').onclick = () => {
+  syncStateFromInputs();
+  const clean = (state.filename || 'config.ini').trim() || 'config.ini';
+  state.ghPath = 'configs/' + clean.replace(/^\/+/, '');
+  render();
+};
+
+function contentsApiUrl(owner, repo, path){
+  const encodedPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}`;
+}
+function rawUrl(owner, repo, branch, path){
+  const encodedPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
+}
+function htmlUrl(owner, repo, branch, path){
+  const encodedPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return `https://github.com/${owner}/${repo}/blob/${branch}/${encodedPath}`;
+}
+
+async function publishToGitHub(){
+  syncStateFromInputs();
+  const token = $('#ghToken').value.trim();
+  const owner = (state.ghOwner || '').trim();
+  const repo = (state.ghRepo || '').trim();
+  const branch = (state.ghBranch || '').trim() || 'main';
+  const path = (state.ghPath || '').trim();
+  const message = (state.ghMessage || '').trim() || 'chore: publish generated config';
+  const content = $('#output').value;
+  if(!token || !owner || !repo || !path){
+    $('#publishResult').innerHTML = '<div class="warn">请填写 GitHub Token、Owner、Repo、保存路径。</div>';
+    return;
+  }
+  $('#publishResult').innerHTML = '<div class="notice">正在发布到 GitHub...</div>';
+  const api = contentsApiUrl(owner, repo, path);
+  let sha = undefined;
+  try {
+    const getResp = await fetch(api + '?ref=' + encodeURIComponent(branch), {
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' }
+    });
+    if(getResp.ok){
+      const current = await getResp.json();
+      sha = current.sha;
+    } else if(getResp.status !== 404) {
+      const t = await getResp.text();
+      throw new Error('读取目标文件失败：' + getResp.status + ' ' + t);
+    }
+
+    const putResp = await fetch(api, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message,
+        branch,
+        content: encodeUTF8Base64(content),
+        sha
+      })
+    });
+
+    const resultText = await putResp.text();
+    if(!putResp.ok) throw new Error('写入失败：' + putResp.status + ' ' + resultText);
+    const raw = rawUrl(owner, repo, branch, path);
+    const html = htmlUrl(owner, repo, branch, path);
+    $('#publishResult').innerHTML = `<div class="successbox">发布成功。<br>Raw 链接：<a href="${raw}" target="_blank">${raw}</a><br>GitHub 页面：<a href="${html}" target="_blank">${html}</a></div>`;
+  } catch(err) {
+    $('#publishResult').innerHTML = '<div class="warn">发布失败：' + esc(String(err.message || err)) + '</div>';
+  }
+}
+$('#publishBtn').onclick = publishToGitHub;
+
+render();
+</script>
+</body>
+</html>
