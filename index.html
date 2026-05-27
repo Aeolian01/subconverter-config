@@ -395,6 +395,13 @@ function aiGroupNames(){
   });
   return names.length ? names : ['🤖 OpenAi', '🤖 Gemini', '🤖 Anthropic'];
 }
+function manualGroupName(){
+  const groups = state.groups || [];
+  const exact = groups.find(group => group && group.name === '☑️ 手动选择');
+  if(exact) return exact.name;
+  const named = groups.find(group => group && /手动选择/.test(group.name || ''));
+  return named ? named.name : '';
+}
 function jsString(value){
   return JSON.stringify(value || '');
 }
@@ -404,10 +411,12 @@ function buildVergeScript(){
   const landingGroups = effectiveLandingGroups();
   const landingCode = landingGroups.map(item => `    { name: ${jsString(item.name)}, regex: new RegExp(${jsString(item.regex)}, "i"), chainName: ${jsString(item.chainName)}, prefix: ${jsString(item.prefix)} }`).join(',\n');
   const aiGroupsCode = JSON.stringify(aiGroupNames(), null, 2).replace(/\n/g, '\n  ');
+  const manualGroup = manualGroupName();
   return `function main(config) {
   config = config || {};
 
   var FRONT_GROUP = ${jsString(frontGroup)};
+  var MANUAL_GROUP = ${jsString(manualGroup)};
   var LANDING_GROUPS = [
 ${landingCode}
   ];
@@ -452,6 +461,10 @@ ${landingCode}
   }
 
   var frontNames = originalProxies.map(function (proxy) { return proxy.name; });
+  var frontTargets = frontNames.slice();
+  if (MANUAL_GROUP && groups.some(function (group) { return group && group.name === MANUAL_GROUP; }) && frontTargets.indexOf(MANUAL_GROUP) === -1) {
+    frontTargets.push(MANUAL_GROUP);
+  }
   var generatedProxies = [];
   LANDING_GROUPS.forEach(function (landing) {
     landing.proxies = [];
@@ -499,7 +512,7 @@ ${landingCode}
     {
       name: FRONT_GROUP,
       type: "select",
-      proxies: frontNames.length ? frontNames : ["DIRECT"]
+      proxies: frontTargets.length ? frontTargets : ["DIRECT"]
     }
   ];
   LANDING_GROUPS.forEach(function (landing) {
