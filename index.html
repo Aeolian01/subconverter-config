@@ -44,6 +44,7 @@
     .btn.success{background:var(--accent2);color:#08130d;border-color:transparent;font-weight:700}
     .btn.danger{background:#2d1519;color:#ffd7d7;border-color:#5c262d}
     .btn.small{min-height:32px;padding:6px 9px;font-size:12px}
+    .btn.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;padding:6px 0;text-align:center}
     details{margin-top:16px}
     summary{cursor:pointer;list-style:none;font-weight:750}
     summary::-webkit-details-marker{display:none}
@@ -51,9 +52,18 @@
     .summaryline span{color:var(--muted);font-size:12px;font-weight:500}
     .advanced-body{margin-top:14px}
     .list{display:flex;flex-direction:column;gap:10px}
-    .item{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel2)}
+    .item{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel2);transition:transform .18s ease,opacity .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease}
+    .item.dragging{position:relative;z-index:2;opacity:.72;transform:translateY(-3px) scale(1.01);box-shadow:0 14px 34px rgba(0,0,0,.32);background:#111f36}
+    .item.drag-over{border-color:var(--accent);box-shadow:0 0 0 1px rgba(110,168,254,.5),0 10px 24px rgba(22,50,96,.28);background:#10203b;transform:translateY(-1px)}
+    .item.collapsed .itembody{display:none}
+    .item.collapsed .itemhead{margin-bottom:0}
     .itemhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
     .itemhead strong{font-size:15px}
+    .itemtitle,.itemactions{display:flex;align-items:center;gap:8px}
+    .itemtitle{min-width:0}
+    .itemtitle strong{white-space:nowrap}
+    .drag-handle{cursor:grab;color:var(--muted);font-weight:800;touch-action:none;user-select:none}
+    .drag-handle:active{cursor:grabbing}
     .checkrow{display:flex;align-items:flex-start;gap:10px}
     .checkrow input{margin-top:3px}
     .typehelp{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#101b2e;color:var(--muted);font-size:12px}
@@ -86,6 +96,10 @@
       .script-output{height:380px}
       .code-panel.expanded .code-output{height:64vh}
     }
+    @media (prefers-reduced-motion: reduce){
+      .item{transition:none}
+      .item.dragging,.item.drag-over{transform:none}
+    }
   </style>
 </head>
 <body>
@@ -105,8 +119,6 @@
 
   <div class="toolbar">
     <button class="btn" id="presetAll">载入 AI 预设</button>
-    <button class="btn" id="addRule">添加规则</button>
-    <button class="btn" id="addGroup">添加分组</button>
     <button class="btn" id="exportJson">导出 JSON</button>
     <button class="btn" id="importBtn">导入 JSON</button>
     <input type="file" id="importFile" accept="application/json" hidden>
@@ -128,12 +140,12 @@
       </div>
 
       <div class="panel" style="margin-top:16px">
-        <div class="itemhead"><strong>规则列表 <span class="badge" id="ruleCount">0</span></strong><span class="hint">生成格式：<code>ruleset=策略组,规则地址/表达式</code></span></div>
+        <div class="itemhead"><strong>规则列表 <span class="badge" id="ruleCount">0</span></strong><span class="hint">生成格式：<code>ruleset=策略组,规则地址/表达式</code></span><button class="btn small" id="addRule">添加规则</button></div>
         <div id="rules" class="list"></div>
       </div>
 
       <div class="panel" style="margin-top:16px">
-        <div class="itemhead"><strong>分组列表 <span class="badge" id="groupCount">0</span></strong><span class="hint">分组类型可直接下拉选择，成员每行一个</span></div>
+        <div class="itemhead"><strong>分组列表 <span class="badge" id="groupCount">0</span></strong><span class="hint">分组类型可直接下拉选择，成员每行一个</span><button class="btn small" id="addGroup">添加分组</button></div>
         <div id="groups" class="list"></div>
       </div>
 
@@ -201,11 +213,11 @@
             <div class="field"><label for="ghRepo">Repo</label><input id="ghRepo"></div>
           </div>
           <div class="row">
-            <div class="field"><label for="ghBranch">Branch</label><input id="ghBranch"></div>
+            <div class="field"><label for="ghBranch">Branch</label><input id="ghBranch" placeholder="main"></div>
             <div class="field"><label for="ghPath">保存路径</label><input id="ghPath" placeholder="configs/ACL4SSR_Online_AI_Chain.ini"></div>
           </div>
           <div class="row">
-            <div class="field"><label for="ghMessage">Commit message</label><input id="ghMessage"></div>
+            <div class="field"><label for="ghMessage">Commit message</label><input id="ghMessage" placeholder="chore: publish generated config"></div>
             <div class="field"><label for="ghToken">GitHub Token</label><input id="ghToken" type="password" placeholder="ghp_ / github_pat_..."></div>
           </div>
           <div class="toolbar">
@@ -253,11 +265,15 @@ const preset = {
     frontGroupName: '☑️ 前置节点',
     selectedLandingGroups: null
   },
-  ghOwner: 'Aeolian01',
-  ghRepo: 'subconverter-config',
-  ghBranch: 'main',
-  ghPath: 'configs/ACL4SSR_Online_AI_Chain.ini',
-  ghMessage: 'chore: publish generated config'
+  ui: {
+    collapsedRules: [],
+    collapsedGroups: []
+  },
+  ghOwner: '',
+  ghRepo: '',
+  ghBranch: '',
+  ghPath: '',
+  ghMessage: ''
 };
 const groupTypes = [
   { value: 'select', label: 'select - 手动选择', help: '手动选择一个策略或节点。常用成员：[]DIRECT、[]其他分组、.*。', placeholder: '[]DIRECT\n[]其他分组\n.*' },
@@ -281,11 +297,18 @@ function groupTypeOptions(type){
   const custom = known ? '' : `<option value="${esc(type)}" selected>自定义：${esc(type)}</option>`;
   return custom + groupTypes.map(v => `<option value="${v.value}"${v.value === type ? ' selected' : ''}>${v.label}</option>`).join('');
 }
+function normalizeCollapseList(value, length){
+  const source = Array.isArray(value) ? value : [];
+  return Array.from({length}, (_, i) => Boolean(source[i]));
+}
 function withDefaults(saved){
   const next = Object.assign(clone(preset), saved || {});
   next.rules = Array.isArray(saved && saved.rules) ? saved.rules : clone(preset.rules);
   next.groups = Array.isArray(saved && saved.groups) ? saved.groups : clone(preset.groups);
   next.script = Object.assign(clone(preset.script), (saved && saved.script) || {});
+  next.ui = Object.assign(clone(preset.ui), (saved && saved.ui) || {});
+  next.ui.collapsedRules = normalizeCollapseList(next.ui.collapsedRules, next.rules.length);
+  next.ui.collapsedGroups = normalizeCollapseList(next.ui.collapsedGroups, next.groups.length);
   return next;
 }
 function loadState(){
@@ -449,12 +472,27 @@ ${landingCode}
   LANDING_GROUPS.forEach(function (landing) {
     generatedGroupNames[landing.chainName] = true;
   });
-  AI_GROUPS.forEach(function (name) {
-    generatedGroupNames[name] = true;
-  });
 
   var keptGroups = groups.filter(function (group) {
     return !group || !generatedGroupNames[group.name];
+  });
+  var aiTargets = LANDING_GROUPS.map(function (landing) { return landing.chainName; }).concat([FRONT_GROUP, "DIRECT"]);
+
+  function appendMissing(group, names) {
+    if (!Array.isArray(group.proxies)) {
+      group.proxies = [];
+    }
+    names.forEach(function (name) {
+      if (group.proxies.indexOf(name) === -1) {
+        group.proxies.push(name);
+      }
+    });
+  }
+
+  keptGroups.forEach(function (group) {
+    if (group && AI_GROUPS.indexOf(group.name) !== -1) {
+      appendMissing(group, aiTargets);
+    }
   });
 
   var generatedGroups = [
@@ -473,25 +511,184 @@ ${landingCode}
   });
 
   AI_GROUPS.forEach(function (name) {
-    generatedGroups.push({
-      name: name,
-      type: "select",
-      proxies: LANDING_GROUPS.map(function (landing) { return landing.chainName; }).concat([FRONT_GROUP, "DIRECT"])
+    var exists = keptGroups.some(function (group) {
+      return group && group.name === name;
     });
+    if (!exists) {
+      generatedGroups.push({
+        name: name,
+        type: "select",
+        proxies: aiTargets.slice()
+      });
+    }
   });
 
-  config["proxy-groups"] = generatedGroups.concat(keptGroups);
+  config["proxy-groups"] = keptGroups.concat(generatedGroups);
   return config;
 }
 `;
 }
 
+function ensureUiState(){
+  state.ui = state.ui || clone(preset.ui);
+  state.ui.collapsedRules = normalizeCollapseList(state.ui.collapsedRules, state.rules.length);
+  state.ui.collapsedGroups = normalizeCollapseList(state.ui.collapsedGroups, state.groups.length);
+}
+function collapseKey(listName){
+  return listName === 'rules' ? 'collapsedRules' : 'collapsedGroups';
+}
+function listByName(listName){
+  return listName === 'rules' ? state.rules : state.groups;
+}
+function toggleCollapse(listName, i){
+  ensureUiState();
+  const key = collapseKey(listName);
+  if(typeof state.ui[key][i] === 'undefined') return;
+  state.ui[key][i] = !state.ui[key][i];
+  render();
+}
+function moveArrayItem(list, from, to){
+  if(from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return false;
+  const [item] = list.splice(from, 1);
+  list.splice(to, 0, item);
+  return true;
+}
+function prefersReducedMotion(){
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function listSelector(listName){
+  return listName === 'rules' ? '#rules' : '#groups';
+}
+function captureListPositions(containerSelector){
+  if(prefersReducedMotion()) return null;
+  const container = $(containerSelector);
+  if(!container) return null;
+  const positions = {};
+  container.querySelectorAll('.item').forEach(item => {
+    positions[item.dataset.index] = item.getBoundingClientRect().top;
+  });
+  return positions;
+}
+function indexOrderAfterMove(length, from, to){
+  const order = Array.from({length}, (_, i) => i);
+  return moveArrayItem(order, from, to) ? order : null;
+}
+function animateListReorder(containerSelector, beforePositions, oldIndexOrder){
+  if(!beforePositions || !oldIndexOrder || prefersReducedMotion()) return;
+  requestAnimationFrame(() => {
+    const container = $(containerSelector);
+    if(!container) return;
+    const items = Array.from(container.querySelectorAll('.item'));
+    const animated = [];
+    items.forEach(item => {
+      const newIndex = Number(item.dataset.index);
+      const oldIndex = oldIndexOrder[newIndex];
+      const oldTop = beforePositions[oldIndex];
+      if(typeof oldTop !== 'number') return;
+      const delta = oldTop - item.getBoundingClientRect().top;
+      if(Math.abs(delta) < 1) return;
+      item.style.transition = 'none';
+      item.style.transform = `translateY(${delta}px)`;
+      animated.push(item);
+    });
+    if(!animated.length) return;
+    container.offsetHeight;
+    requestAnimationFrame(() => {
+      animated.forEach(item => {
+        item.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)';
+        item.style.transform = '';
+        setTimeout(() => {
+          item.style.transition = '';
+          item.style.transform = '';
+        }, 260);
+      });
+    });
+  });
+}
+function moveListItem(listName, from, to){
+  ensureUiState();
+  const list = listByName(listName);
+  const collapsed = state.ui[collapseKey(listName)];
+  const containerSelector = listSelector(listName);
+  const beforePositions = captureListPositions(containerSelector);
+  const oldIndexOrder = indexOrderAfterMove(list.length, from, to);
+  const moved = moveArrayItem(list, from, to);
+  if(moved) moveArrayItem(collapsed, from, to);
+  if(moved) {
+    render();
+    animateListReorder(containerSelector, beforePositions, oldIndexOrder);
+  }
+  return moved;
+}
+function clearDragClasses(container){
+  if(!container) return;
+  container.querySelectorAll('.item').forEach(item => item.classList.remove('dragging','drag-over'));
+}
+let activeDragCleanup = null;
+function bindDragSort(containerSelector, listName){
+  const container = $(containerSelector);
+  if(!container) return;
+  container.querySelectorAll('.drag-handle').forEach(handle => {
+    function beginDrag(e, moveEvent, endEvent, cancelEvent){
+      if(activeDragCleanup) return;
+      if(typeof e.button === 'number' && e.button !== 0) return;
+      const item = handle.closest('.item');
+      if(!item) return;
+      e.preventDefault();
+      const dragState = {
+        from: Number(item.dataset.index),
+        to: Number(item.dataset.index)
+      };
+      item.classList.add('dragging');
+
+      function clearDragOver(){
+        const currentContainer = $(containerSelector);
+        if(currentContainer) currentContainer.querySelectorAll('.item').forEach(item => item.classList.remove('drag-over'));
+      }
+      function onMove(event){
+        const currentContainer = $(containerSelector);
+        if(!currentContainer) return;
+        const target = document.elementFromPoint(event.clientX, event.clientY);
+        const over = target && target.closest('.item');
+        clearDragOver();
+        if(over && over.parentElement === currentContainer) {
+          dragState.to = Number(over.dataset.index);
+          over.classList.add('drag-over');
+        }
+      }
+      function finishDrag(){
+        document.removeEventListener(moveEvent, onMove);
+        document.removeEventListener(endEvent, finishDrag);
+        if(cancelEvent) document.removeEventListener(cancelEvent, finishDrag);
+        activeDragCleanup = null;
+        clearDragClasses($(containerSelector));
+        moveListItem(listName, dragState.from, dragState.to);
+      }
+
+      activeDragCleanup = finishDrag;
+      document.addEventListener(moveEvent, onMove);
+      document.addEventListener(endEvent, finishDrag);
+      if(cancelEvent) document.addEventListener(cancelEvent, finishDrag);
+    }
+
+    handle.addEventListener('pointerdown', e => beginDrag(e, 'pointermove', 'pointerup', 'pointercancel'));
+    handle.addEventListener('mousedown', e => beginDrag(e, 'mousemove', 'mouseup', null));
+  });
+}
+function cardTools(listName, i, collapsed){
+  const toggle = collapsed ? '展开' : '折叠';
+  const arrow = collapsed ? '▸' : '▾';
+  const toggleFn = listName === 'rules' ? 'toggleRuleCollapse' : 'toggleGroupCollapse';
+  return `<span class="btn small icon drag-handle" title="拖拽排序" role="button" aria-label="拖拽排序" tabindex="0">↕</span><button class="btn small icon" type="button" title="${toggle}" aria-label="${toggle}" onclick="${toggleFn}(${i})">${arrow}</button>`;
+}
 function ruleCard(item, i){
-  return `<div class="item"><div class="itemhead"><strong>规则 ${i+1}</strong><button class="btn danger" onclick="delRule(${i})">删除</button></div><div class="row"><div class="field"><label>策略组</label><input value="${esc(item.group)}" oninput="updateRule(${i},'group',this.value)"></div><div class="field"><label>规则地址 / 表达式</label><input value="${esc(item.url)}" oninput="updateRule(${i},'url',this.value)"></div></div></div>`;
+  const collapsed = Boolean(state.ui.collapsedRules[i]);
+  return `<div class="item${collapsed ? ' collapsed' : ''}" data-index="${i}"><div class="itemhead"><div class="itemtitle">${cardTools('rules', i, collapsed)}<strong>规则 ${i+1}</strong></div><div class="itemactions"><button class="btn danger" onclick="delRule(${i})">删除</button></div></div><div class="itembody"><div class="row"><div class="field"><label>策略组</label><input value="${esc(item.group)}" oninput="updateRule(${i},'group',this.value)"></div><div class="field"><label>规则地址 / 表达式</label><input value="${esc(item.url)}" oninput="updateRule(${i},'url',this.value)"></div></div></div></div>`;
 }
 function groupCard(item, i){
   const meta = groupTypeMeta(item.type);
-  return `<div class="item"><div class="itemhead"><strong>分组 ${i+1}</strong><button class="btn danger" onclick="delGroup(${i})">删除</button></div><div class="row"><div class="field"><label>分组名</label><input value="${esc(item.name)}" oninput="updateGroup(${i},'name',this.value)"></div><div class="field"><label>分组类型</label><select onchange="setGroupType(${i},this.value)">${groupTypeOptions(item.type)}</select></div></div><div class="typehelp">${esc(meta.help)}</div><div class="field" style="margin-top:10px"><label>成员 / 参数（每行一个）</label><textarea placeholder="${esc(meta.placeholder)}" oninput="updateGroup(${i},'items',this.value)">${esc(item.items)}</textarea></div></div>`;
+  const collapsed = Boolean(state.ui.collapsedGroups[i]);
+  return `<div class="item${collapsed ? ' collapsed' : ''}" data-index="${i}"><div class="itemhead"><div class="itemtitle">${cardTools('groups', i, collapsed)}<strong>分组 ${i+1}</strong></div><div class="itemactions"><button class="btn danger" onclick="delGroup(${i})">删除</button></div></div><div class="itembody"><div class="row"><div class="field"><label>分组名</label><input value="${esc(item.name)}" oninput="updateGroup(${i},'name',this.value)"></div><div class="field"><label>分组类型</label><select onchange="setGroupType(${i},this.value)">${groupTypeOptions(item.type)}</select></div></div><div class="typehelp">${esc(meta.help)}</div><div class="field" style="margin-top:10px"><label>成员 / 参数（每行一个）</label><textarea placeholder="${esc(meta.placeholder)}" oninput="updateGroup(${i},'items',this.value)">${esc(item.items)}</textarea></div></div></div>`;
 }
 function landingCard(item, i){
   const selected = item.valid && selectedLandingNames().includes(item.name);
@@ -506,6 +703,7 @@ function renderLandingGroups(){
 }
 
 function render(){
+  ensureUiState();
   $('#title').value = state.title || '';
   $('#filename').value = state.filename || '';
   $('#enable').value = state.enable || 'true';
@@ -514,12 +712,14 @@ function render(){
   $('#extra').value = state.extra || '';
   $('#ghOwner').value = state.ghOwner || '';
   $('#ghRepo').value = state.ghRepo || '';
-  $('#ghBranch').value = state.ghBranch || 'main';
+  $('#ghBranch').value = state.ghBranch || '';
   $('#ghPath').value = state.ghPath || '';
   $('#ghMessage').value = state.ghMessage || '';
   $('#scriptFrontGroupName').value = (state.script && state.script.frontGroupName) || preset.script.frontGroupName;
   $('#rules').innerHTML = state.rules.map(ruleCard).join('');
   $('#groups').innerHTML = state.groups.map(groupCard).join('');
+  bindDragSort('#rules', 'rules');
+  bindDragSort('#groups', 'groups');
   renderLandingGroups();
   $('#ruleCount').textContent = state.rules.length;
   $('#groupCount').textContent = state.groups.length;
@@ -604,14 +804,40 @@ function toggleLandingGroup(i, checked){
   refreshOutputs();
 }
 function setGroupType(i, type){ state.groups[i].type = type; render(); }
-function delRule(i){ state.rules.splice(i,1); render(); }
-function delGroup(i){ state.groups.splice(i,1); render(); }
+function addRuleItem(){
+  ensureUiState();
+  state.rules.push({group:'', url:''});
+  state.ui.collapsedRules.push(false);
+  render();
+}
+function addGroupItem(){
+  ensureUiState();
+  state.groups.push({name:'', type:'select', items:''});
+  state.ui.collapsedGroups.push(false);
+  render();
+}
+function delRule(i){
+  ensureUiState();
+  state.rules.splice(i,1);
+  state.ui.collapsedRules.splice(i,1);
+  render();
+}
+function delGroup(i){
+  ensureUiState();
+  state.groups.splice(i,1);
+  state.ui.collapsedGroups.splice(i,1);
+  render();
+}
+function toggleRuleCollapse(i){ toggleCollapse('rules', i); }
+function toggleGroupCollapse(i){ toggleCollapse('groups', i); }
 window.updateRule = updateRule;
 window.updateGroup = updateGroup;
 window.toggleLandingGroup = toggleLandingGroup;
 window.setGroupType = setGroupType;
 window.delRule = delRule;
 window.delGroup = delGroup;
+window.toggleRuleCollapse = toggleRuleCollapse;
+window.toggleGroupCollapse = toggleGroupCollapse;
 
 ['title','filename','enable','overwrite','comments','extra','ghOwner','ghRepo','ghBranch','ghPath','ghMessage','scriptFrontGroupName'].forEach(id => {
   const el = $('#' + id);
@@ -619,8 +845,8 @@ window.delGroup = delGroup;
   el.onchange = syncAndRefresh;
 });
 
-$('#addRule').onclick = () => { state.rules.push({group:'', url:''}); render(); };
-$('#addGroup').onclick = () => { state.groups.push({name:'', type:'select', items:''}); render(); };
+$('#addRule').onclick = addRuleItem;
+$('#addGroup').onclick = addGroupItem;
 $('#presetAll').onclick = () => { state = clone(preset); render(); $('#publishResult').innerHTML = ''; };
 $('#resetAll').onclick = () => { if(confirm('确定恢复默认预设吗？')){ state = clone(preset); render(); $('#publishResult').innerHTML = ''; } };
 $('#copyBtn').onclick = () => copyText('#output', '已复制 ini 到剪贴板');
