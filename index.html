@@ -476,7 +476,7 @@ ${landingCode}
   var keptGroups = groups.filter(function (group) {
     return !group || !generatedGroupNames[group.name];
   });
-  var aiTargets = LANDING_GROUPS.map(function (landing) { return landing.chainName; }).concat([FRONT_GROUP, "DIRECT"]);
+  var aiTargets = LANDING_GROUPS.map(function (landing) { return landing.chainName; });
 
   function appendMissing(group, names) {
     if (!Array.isArray(group.proxies)) {
