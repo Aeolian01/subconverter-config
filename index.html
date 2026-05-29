@@ -122,6 +122,8 @@
     <button class="btn" id="exportJson">导出 JSON</button>
     <button class="btn" id="importBtn">导入 JSON</button>
     <input type="file" id="importFile" accept="application/json" hidden>
+    <button class="btn" id="importIniBtn">导入 ini</button>
+    <input type="file" id="importIniFile" accept=".ini,.conf,.txt,text/plain" hidden>
     <button class="btn danger" id="resetAll">恢复默认</button>
   </div>
 
@@ -180,6 +182,11 @@
           <label for="scriptFrontGroupName">前置节点组名</label>
           <input id="scriptFrontGroupName" placeholder="☑️ 前置节点">
         </div>
+        <div class="field">
+          <label for="scriptImportGroupName">链式节点导入分组</label>
+          <input id="scriptImportGroupName" list="groupNameOptions" placeholder="☑️ 手动选择">
+          <datalist id="groupNameOptions"></datalist>
+        </div>
         <div class="itemhead"><strong>落地分组 <span class="badge" id="landingCount">0</span></strong><span class="hint">勾选后生成 dialer-proxy 链路</span></div>
         <div id="landingGroups" class="list"></div>
         <div class="notice" style="margin-top:12px">AI 分组会从规则列表自动识别；落地分组的匹配正则默认取对应分组“成员 / 参数”的第一行。</div>
@@ -236,6 +243,7 @@
 
 <script>
 const STORE_KEY = 'subconverter-config-builder-v4';
+const DEFAULT_CONFIG_PATH = 'configs/ACL4SSR_Online_AI_Chain.ini';
 const preset = {
   title: 'ACL4SSR_Online_AI_Chain',
   filename: 'ACL4SSR_Online_AI_Chain.ini',
@@ -263,6 +271,7 @@ const preset = {
   extra: '',
   script: {
     frontGroupName: '☑️ 前置节点',
+    importGroupName: '',
     selectedLandingGroups: null
   },
   ui: {
@@ -311,15 +320,134 @@ function withDefaults(saved){
   next.ui.collapsedGroups = normalizeCollapseList(next.ui.collapsedGroups, next.groups.length);
   return next;
 }
-function loadState(){
+function fileBaseName(path){
+  return String(path || '').split(/[\\/]/).pop() || '';
+}
+function fileStem(path){
+  const base = fileBaseName(path);
+  return base.replace(/\.[^.]*$/, '') || base;
+}
+function splitFirst(value, separator){
+  const index = String(value).indexOf(separator);
+  if(index === -1) return [String(value), ''];
+  return [String(value).slice(0, index), String(value).slice(index + separator.length)];
+}
+function parseBooleanString(value, fallback){
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === 'false' ? normalized : fallback;
+}
+function parseIniConfig(text, sourceName){
+  const parsed = clone(preset);
+  const filename = fileBaseName(sourceName) || parsed.filename;
+  parsed.title = fileStem(filename) || parsed.title;
+  parsed.filename = filename;
+  parsed.rules = [];
+  parsed.groups = [];
+  parsed.extra = '';
+  parsed.script = clone(preset.script);
+  parsed.ui = clone(preset.ui);
+
+  const comments = [];
+  const extra = [];
+  let section = '';
+  let seenKnownLine = false;
+
+  String(text || '').replace(/\r\n?/g, '\n').split('\n').forEach(line => {
+    const rawLine = line.replace(/\s+$/, '');
+    const trimmed = rawLine.trim();
+    if(!trimmed) return;
+
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if(sectionMatch){
+      section = sectionMatch[1].trim().toLowerCase();
+      if(section !== 'custom') extra.push(rawLine);
+      return;
+    }
+
+    if(section && section !== 'custom'){
+      extra.push(rawLine);
+      return;
+    }
+
+    if(trimmed.startsWith(';') || trimmed.startsWith('#')){
+      if(seenKnownLine) extra.push(rawLine);
+      else comments.push(rawLine);
+      return;
+    }
+
+    const keyValue = splitFirst(trimmed, '=');
+    const key = keyValue[0].trim().toLowerCase();
+    const value = keyValue[1].trim();
+
+    if(key === 'ruleset'){
+      const ruleParts = splitFirst(value, ',');
+      parsed.rules.push({ group: ruleParts[0].trim(), url: ruleParts[1].trim() });
+      seenKnownLine = true;
+      return;
+    }
+
+    if(key === 'custom_proxy_group'){
+      const parts = value.split('`');
+      const name = (parts.shift() || '').trim();
+      const type = (parts.shift() || 'select').trim() || 'select';
+      parsed.groups.push({
+        name,
+        type,
+        items: parts.map(part => part.trim()).filter(Boolean).join('\n')
+      });
+      seenKnownLine = true;
+      return;
+    }
+
+    if(key === 'enable_rule_generator'){
+      parsed.enable = parseBooleanString(value, parsed.enable);
+      seenKnownLine = true;
+      return;
+    }
+
+    if(key === 'overwrite_original_rules'){
+      parsed.overwrite = parseBooleanString(value, parsed.overwrite);
+      seenKnownLine = true;
+      return;
+    }
+
+    extra.push(rawLine);
+  });
+
+  parsed.comments = comments.join('\n');
+  parsed.extra = extra.join('\n');
+  return withDefaults(parsed);
+}
+function loadSavedState(){
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if(!raw) return clone(preset);
+    if(!raw) return null;
     const saved = JSON.parse(raw);
     return withDefaults(saved);
-  } catch(e) { return clone(preset); }
+  } catch(e) { return null; }
 }
-let state = loadState();
+async function loadDefaultConfigState(){
+  try {
+    if(typeof fetch !== 'function') throw new Error('fetch unavailable');
+    const resp = await fetch(DEFAULT_CONFIG_PATH, { cache: 'no-cache' });
+    if(!resp.ok) throw new Error('default config fetch failed: ' + resp.status);
+    const text = await resp.text();
+    return parseIniConfig(text, DEFAULT_CONFIG_PATH);
+  } catch(e) {
+    return withDefaults(clone(preset));
+  }
+}
+let state = clone(preset);
+
+async function loadPresetState(){
+  state = await loadDefaultConfigState();
+  render();
+  $('#publishResult').innerHTML = '';
+}
+async function init(){
+  state = loadSavedState() || await loadDefaultConfigState();
+  render();
+}
 
 function saveState(){
   const toSave = Object.assign({}, state);
@@ -385,17 +513,9 @@ function effectiveLandingGroups(){
   const selected = new Set(selectedLandingNames());
   return landingCandidates().filter(item => selected.has(item.name) && item.valid);
 }
-function aiGroupNames(){
-  const names = [];
-  (state.rules || []).forEach(rule => {
-    const haystack = ((rule.group || '') + ' ' + (rule.url || '')).toLowerCase();
-    if(rule.group && /(openai|gemini|claude|anthropic)/i.test(haystack) && !names.includes(rule.group)){
-      names.push(rule.group);
-    }
-  });
-  return names.length ? names : ['🤖 OpenAi', '🤖 Gemini', '🤖 Anthropic'];
-}
 function manualGroupName(){
+  const manual = ((state.script && state.script.importGroupName) || '').trim();
+  if(manual) return manual;
   const groups = state.groups || [];
   const exact = groups.find(group => group && group.name === '☑️ 手动选择');
   if(exact) return exact.name;
@@ -410,7 +530,6 @@ function buildVergeScript(){
   const frontGroup = ((state.script && state.script.frontGroupName) || preset.script.frontGroupName).trim() || preset.script.frontGroupName;
   const landingGroups = effectiveLandingGroups();
   const landingCode = landingGroups.map(item => `    { name: ${jsString(item.name)}, regex: new RegExp(${jsString(item.regex)}, "i"), chainName: ${jsString(item.chainName)}, prefix: ${jsString(item.prefix)} }`).join(',\n');
-  const aiGroupsCode = JSON.stringify(aiGroupNames(), null, 2).replace(/\n/g, '\n  ');
   const manualGroup = manualGroupName();
   return `function main(config) {
   config = config || {};
@@ -420,7 +539,6 @@ function buildVergeScript(){
   var LANDING_GROUPS = [
 ${landingCode}
   ];
-  var AI_GROUPS = ${aiGroupsCode};
 
   var proxies = Array.isArray(config.proxies) ? config.proxies : [];
   var groups = Array.isArray(config["proxy-groups"]) ? config["proxy-groups"] : [];
@@ -489,24 +607,6 @@ ${landingCode}
   var keptGroups = groups.filter(function (group) {
     return !group || !generatedGroupNames[group.name];
   });
-  var aiTargets = LANDING_GROUPS.map(function (landing) { return landing.chainName; });
-
-  function appendMissing(group, names) {
-    if (!Array.isArray(group.proxies)) {
-      group.proxies = [];
-    }
-    names.forEach(function (name) {
-      if (group.proxies.indexOf(name) === -1) {
-        group.proxies.push(name);
-      }
-    });
-  }
-
-  keptGroups.forEach(function (group) {
-    if (group && AI_GROUPS.indexOf(group.name) !== -1) {
-      appendMissing(group, aiTargets);
-    }
-  });
 
   var generatedGroups = [
     {
@@ -521,19 +621,6 @@ ${landingCode}
       type: "select",
       proxies: landing.proxies.length ? landing.proxies : ["DIRECT"]
     });
-  });
-
-  AI_GROUPS.forEach(function (name) {
-    var exists = keptGroups.some(function (group) {
-      return group && group.name === name;
-    });
-    if (!exists) {
-      generatedGroups.push({
-        name: name,
-        type: "select",
-        proxies: aiTargets.slice()
-      });
-    }
   });
 
   config["proxy-groups"] = keptGroups.concat(generatedGroups);
@@ -714,6 +801,16 @@ function renderLandingGroups(){
   $('#landingGroups').innerHTML = candidates.length ? candidates.map(landingCard).join('') : '<div class="notice">左侧暂无可用分组。</div>';
   $('#landingCount').textContent = selectedValid;
 }
+function renderGroupNameOptions(){
+  const datalist = $('#groupNameOptions');
+  if(!datalist) return;
+  const names = [];
+  (state.groups || []).forEach(group => {
+    const name = (group && group.name || '').trim();
+    if(name && !names.includes(name)) names.push(name);
+  });
+  datalist.innerHTML = names.map(name => `<option value="${esc(name)}"></option>`).join('');
+}
 
 function render(){
   ensureUiState();
@@ -729,8 +826,10 @@ function render(){
   $('#ghPath').value = state.ghPath || '';
   $('#ghMessage').value = state.ghMessage || '';
   $('#scriptFrontGroupName').value = (state.script && state.script.frontGroupName) || preset.script.frontGroupName;
+  $('#scriptImportGroupName').value = (state.script && state.script.importGroupName) || '';
   $('#rules').innerHTML = state.rules.map(ruleCard).join('');
   $('#groups').innerHTML = state.groups.map(groupCard).join('');
+  renderGroupNameOptions();
   bindDragSort('#rules', 'rules');
   bindDragSort('#groups', 'groups');
   renderLandingGroups();
@@ -756,6 +855,7 @@ function syncStateFromInputs(){
   state.ghMessage = $('#ghMessage').value;
   state.script = state.script || clone(preset.script);
   state.script.frontGroupName = $('#scriptFrontGroupName').value;
+  state.script.importGroupName = $('#scriptImportGroupName').value;
 }
 
 function refreshOutputs(){
@@ -800,6 +900,7 @@ function updateRule(i, key, value){
 function updateGroup(i, key, value){
   if(!state.groups[i]) return;
   state.groups[i][key] = value;
+  if(key === 'name') renderGroupNameOptions();
   renderLandingGroups();
   refreshOutputs();
 }
@@ -852,7 +953,7 @@ window.delGroup = delGroup;
 window.toggleRuleCollapse = toggleRuleCollapse;
 window.toggleGroupCollapse = toggleGroupCollapse;
 
-['title','filename','enable','overwrite','comments','extra','ghOwner','ghRepo','ghBranch','ghPath','ghMessage','scriptFrontGroupName'].forEach(id => {
+['title','filename','enable','overwrite','comments','extra','ghOwner','ghRepo','ghBranch','ghPath','ghMessage','scriptFrontGroupName','scriptImportGroupName'].forEach(id => {
   const el = $('#' + id);
   el.oninput = syncAndRefresh;
   el.onchange = syncAndRefresh;
@@ -860,8 +961,8 @@ window.toggleGroupCollapse = toggleGroupCollapse;
 
 $('#addRule').onclick = addRuleItem;
 $('#addGroup').onclick = addGroupItem;
-$('#presetAll').onclick = () => { state = clone(preset); render(); $('#publishResult').innerHTML = ''; };
-$('#resetAll').onclick = () => { if(confirm('确定恢复默认预设吗？')){ state = clone(preset); render(); $('#publishResult').innerHTML = ''; } };
+$('#presetAll').onclick = loadPresetState;
+$('#resetAll').onclick = async () => { if(confirm('确定恢复默认预设吗？')) await loadPresetState(); };
 $('#copyBtn').onclick = () => copyText('#output', '已复制 ini 到剪贴板');
 $('#copyScriptBtn').onclick = () => copyText('#scriptOutput', '已复制覆写脚本到剪贴板');
 $('#downloadBtn').onclick = () => downloadText('#output', (state.filename || 'config.ini').replace(/\s+/g, '_'), 'text/plain;charset=utf-8');
@@ -892,6 +993,26 @@ $('#importFile').onchange = e => {
     } catch(err) {
       alert('JSON 导入失败');
     }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+};
+$('#importIniBtn').onclick = () => $('#importIniFile').click();
+$('#importIniFile').onchange = e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const keepToken = $('#ghToken').value;
+      state = parseIniConfig(String(reader.result || ''), file.name);
+      render();
+      $('#ghToken').value = keepToken;
+      alert('ini 导入成功');
+    } catch(err) {
+      alert('ini 导入失败');
+    }
+    e.target.value = '';
   };
   reader.readAsText(file);
 };
@@ -969,7 +1090,7 @@ async function publishToGitHub(){
 }
 $('#publishBtn').onclick = publishToGitHub;
 
-render();
+init();
 </script>
 </body>
 </html>
